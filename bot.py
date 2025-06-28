@@ -488,7 +488,7 @@ class Goblin:
                                 f"{Fore.CYAN + Style.BRIGHT} Status  : {Style.RESET_ALL}"
                                 f"{Fore.RED + Style.BRIGHT}Not Complete{Style.RESET_ALL}"
                             )
-                            continue
+                        continue
 
                     self.log(
                         f"{Fore.MAGENTA + Style.BRIGHT}     >{Style.RESET_ALL}"
