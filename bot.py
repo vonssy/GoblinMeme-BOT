@@ -1,13 +1,14 @@
 from aiohttp import (
     ClientResponseError,
     ClientSession,
-    ClientTimeout
+    ClientTimeout,
+    BasicAuth
 )
 from aiohttp_socks import ProxyConnector
 from fake_useragent import FakeUserAgent
 from datetime import datetime
 from colorama import *
-import asyncio, os, json, pytz
+import asyncio, json, re, os, pytz
 
 wib = pytz.timezone('Asia/Jakarta')
 
@@ -41,7 +42,7 @@ class Goblin:
     def welcome(self):
         print(
             f"""
-        {Fore.GREEN + Style.BRIGHT}Auto Claim {Fore.BLUE + Style.BRIGHT}Goblin Meme - BOT
+        {Fore.GREEN + Style.BRIGHT}Goblin Meme {Fore.BLUE + Style.BRIGHT}Auto BOT
             """
             f"""
         {Fore.GREEN + Style.BRIGHT}Rey? {Fore.YELLOW + Style.BRIGHT}<INI WATERMARK>
@@ -58,7 +59,7 @@ class Goblin:
         try:
             if use_proxy_choice == 1:
                 async with ClientSession(timeout=ClientTimeout(total=30)) as session:
-                    async with session.get("https://api.proxyscrape.com/v4/free-proxy-list/get?request=display_proxies&proxy_format=protocolipport&format=text") as response:
+                    async with session.get("https://raw.githubusercontent.com/monosans/proxy-list/refs/heads/main/proxies/all.txt") as response:
                         response.raise_for_status()
                         content = await response.text()
                         with open(filename, 'w') as f:
@@ -106,6 +107,26 @@ class Goblin:
         self.account_proxies[account] = proxy
         self.proxy_index = (self.proxy_index + 1) % len(self.proxies)
         return proxy
+    
+    def build_proxy_config(self, proxy=None):
+        if not proxy:
+            return None, None, None
+
+        if proxy.startswith("socks"):
+            connector = ProxyConnector.from_url(proxy)
+            return connector, None, None
+
+        elif proxy.startswith("http"):
+            match = re.match(r"http://(.*?):(.*?)@(.*)", proxy)
+            if match:
+                username, password, host_port = match.groups()
+                clean_url = f"http://{host_port}"
+                auth = BasicAuth(username, password)
+                return None, clean_url, auth
+            else:
+                return None, proxy, None
+
+        raise Exception("Unsupported Proxy Type.")
 
     def print_question(self):
         while True:
@@ -141,23 +162,24 @@ class Goblin:
 
         return choose, rotate
     
-    async def check_connection(self, proxy=None):
-        connector = ProxyConnector.from_url(proxy) if proxy else None
+    async def check_connection(self, proxy_url=None):
+        connector, proxy, proxy_auth = self.build_proxy_config(proxy_url)
         try:
             async with ClientSession(connector=connector, timeout=ClientTimeout(total=30)) as session:
-                async with session.post(url="http://ip-api.com/json") as response:
+                async with session.get(url="https://api.ipify.org?format=json", proxy=proxy, proxy_auth=proxy_auth) as response:
                     response.raise_for_status()
-                    return await response.json()
+                    return True
         except (Exception, ClientResponseError) as e:
             self.log(
-                f"{Fore.CYAN + Style.BRIGHT}Status :{Style.RESET_ALL}"
-                f"{Fore.RED + Style.BRIGHT} Connection Not 200 OK {Style.RESET_ALL}"
-                f"{Fore.MAGENTA + Style.BRIGHT}-{Style.RESET_ALL}"
-                f"{Fore.YELLOW + Style.BRIGHT} {str(e)} {Style.RESET_ALL}"
+                f"{Fore.CYAN+Style.BRIGHT}Status :{Style.RESET_ALL}"
+                f"{Fore.RED+Style.BRIGHT} Connection Not 200 OK {Style.RESET_ALL}"
+                f"{Fore.MAGENTA+Style.BRIGHT}-{Style.RESET_ALL}"
+                f"{Fore.YELLOW+Style.BRIGHT} {str(e)} {Style.RESET_ALL}"
             )
-            return None
+        
+        return None
     
-    async def auth_session(self, cookie: str, proxy=None, retries=5):
+    async def auth_session(self, cookie: str, proxy_url=None, retries=5):
         url = f"{self.BASE_API}/auth/session"
         headers = {
             **self.headers,
@@ -165,10 +187,10 @@ class Goblin:
         }
         await asyncio.sleep(3)
         for attempt in range(retries):
-            connector = ProxyConnector.from_url(proxy) if proxy else None
+            connector, proxy, proxy_auth = self.build_proxy_config(proxy_url)
             try:
                 async with ClientSession(connector=connector, timeout=ClientTimeout(total=60)) as session:
-                    async with session.get(url=url, headers=headers, ssl=False) as response:
+                    async with session.get(url=url, headers=headers, proxy=proxy, proxy_auth=proxy_auth) as response:
                         response.raise_for_status()
                         return await response.json()
             except (Exception, ClientResponseError) as e:
@@ -177,7 +199,7 @@ class Goblin:
                     continue
                 return None
     
-    async def box_lists(self, cookie: str, proxy=None, retries=5):
+    async def box_lists(self, cookie: str, proxy_url=None, retries=5):
         url = f"{self.BASE_API}/box"
         headers = {
             **self.headers,
@@ -185,10 +207,10 @@ class Goblin:
         }
         await asyncio.sleep(3)
         for attempt in range(retries):
-            connector = ProxyConnector.from_url(proxy) if proxy else None
+            connector, proxy, proxy_auth = self.build_proxy_config(proxy_url)
             try:
                 async with ClientSession(connector=connector, timeout=ClientTimeout(total=60)) as session:
-                    async with session.get(url=url, headers=headers, ssl=False) as response:
+                    async with session.get(url=url, headers=headers, proxy=proxy, proxy_auth=proxy_auth) as response:
                         response.raise_for_status()
                         return await response.json()
             except (Exception, ClientResponseError) as e:
@@ -197,7 +219,7 @@ class Goblin:
                     continue
                 return None
     
-    async def box_data(self, cookie: str, box_id: str, proxy=None, retries=5):
+    async def box_data(self, cookie: str, box_id: str, proxy_url=None, retries=5):
         url = f"{self.BASE_API}/box/{box_id}"
         headers = {
             **self.headers,
@@ -205,10 +227,10 @@ class Goblin:
         }
         await asyncio.sleep(3)
         for attempt in range(retries):
-            connector = ProxyConnector.from_url(proxy) if proxy else None
+            connector, proxy, proxy_auth = self.build_proxy_config(proxy_url)
             try:
                 async with ClientSession(connector=connector, timeout=ClientTimeout(total=60)) as session:
-                    async with session.get(url=url, headers=headers, ssl=False) as response:
+                    async with session.get(url=url, headers=headers, proxy=proxy, proxy_auth=proxy_auth) as response:
                         response.raise_for_status()
                         return await response.json()
             except (Exception, ClientResponseError) as e:
@@ -217,7 +239,7 @@ class Goblin:
                     continue
                 return None
     
-    async def start_mining(self, cookie: str, box_id: str, proxy=None, retries=5):
+    async def start_mining(self, cookie: str, box_id: str, proxy_url=None, retries=5):
         url = f"{self.BASE_API}/box/{box_id}/start"
         headers = {
             **self.headers,
@@ -227,10 +249,10 @@ class Goblin:
         }
         await asyncio.sleep(3)
         for attempt in range(retries):
-            connector = ProxyConnector.from_url(proxy) if proxy else None
+            connector, proxy, proxy_auth = self.build_proxy_config(proxy_url)
             try:
                 async with ClientSession(connector=connector, timeout=ClientTimeout(total=60)) as session:
-                    async with session.post(url=url, headers=headers, json={}, ssl=False) as response:
+                    async with session.post(url=url, headers=headers, json={}, proxy=proxy, proxy_auth=proxy_auth) as response:
                         if response.status == 400:
                             return None
                         response.raise_for_status()
@@ -241,7 +263,7 @@ class Goblin:
                     continue
                 return None
     
-    async def open_box(self, cookie: str, box_id: str, proxy=None, retries=5):
+    async def open_box(self, cookie: str, box_id: str, proxy_url=None, retries=5):
         url = f"{self.BASE_API}/box/{box_id}/claim"
         headers = {
             **self.headers,
@@ -251,10 +273,10 @@ class Goblin:
         }
         await asyncio.sleep(3)
         for attempt in range(retries):
-            connector = ProxyConnector.from_url(proxy) if proxy else None
+            connector, proxy, proxy_auth = self.build_proxy_config(proxy_url)
             try:
                 async with ClientSession(connector=connector, timeout=ClientTimeout(total=60)) as session:
-                    async with session.post(url=url, headers=headers, json={}, ssl=False) as response:
+                    async with session.post(url=url, headers=headers, json={}, proxy=proxy, proxy_auth=proxy_auth) as response:
                         response.raise_for_status()
                         return await response.json()
             except (Exception, ClientResponseError) as e:
@@ -263,7 +285,7 @@ class Goblin:
                     continue
                 return None
     
-    async def complete_mission(self, cookie: str, box_id: str, mission_url: str, proxy=None, retries=5):
+    async def complete_mission(self, cookie: str, box_id: str, mission_url: str, proxy_url=None, retries=5):
         url = f"{self.BASE_API}/box/{box_id}/mission"
         data = json.dumps({"url":mission_url})
         headers = {
@@ -274,10 +296,10 @@ class Goblin:
         }
         await asyncio.sleep(3)
         for attempt in range(retries):
-            connector = ProxyConnector.from_url(proxy) if proxy else None
+            connector, proxy, proxy_auth = self.build_proxy_config(proxy_url)
             try:
                 async with ClientSession(connector=connector, timeout=ClientTimeout(total=60)) as session:
-                    async with session.post(url=url, headers=headers, data=data, ssl=False) as response:
+                    async with session.post(url=url, headers=headers, data=data, proxy=proxy, proxy_auth=proxy_auth) as response:
                         response.raise_for_status()
                         return await response.json()
             except (Exception, ClientResponseError) as e:
@@ -289,14 +311,17 @@ class Goblin:
     async def process_check_connection(self, cookie: str, use_proxy: bool, rotate_proxy: bool):
         while True:
             proxy = self.get_next_proxy_for_account(cookie) if use_proxy else None
+            self.log(
+                f"{Fore.CYAN + Style.BRIGHT}Proxy  :{Style.RESET_ALL}"
+                f"{Fore.WHITE + Style.BRIGHT} {proxy} {Style.RESET_ALL}"
+            )
 
-            check = await self.check_connection(proxy)
-            if check and check.get("status") == "success":
+            is_valid = await self.check_connection(proxy)
+            if is_valid:
                 return True
             
             if rotate_proxy:
                 proxy = self.rotate_proxy_for_account(cookie)
-                await asyncio.sleep(5)
                 continue
 
             return False
